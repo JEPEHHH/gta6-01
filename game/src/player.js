@@ -1,7 +1,7 @@
 // The player on foot: walking and running, aiming at the mouse, shooting and punching, health and
 // armour, cash, and getting in and out of cars. Driving physics lives in vehicles.js; this module
 // decides which of the two the player is doing and keeps the body out of walls.
-import { ECON, PALETTE, PLAYER } from './config.js';
+import { ECON, PALETTE, PLAYER, RENDER, VIEW } from './config.js';
 import { clamp } from './random.js';
 import { nearBuildings } from './city.js';
 import { driveVehicle, nearestVehicle, integrate } from './vehicles.js';
@@ -32,6 +32,15 @@ export function createPlayer(city) {
   };
 }
 
+/** The world point under the mouse: the input reads the screen, the game lives in world pixels. */
+export function aimPoint(world, input) {
+  const zoom = world.zoom || RENDER.zoom;
+  return {
+    x: world.camera.x + (input.aimX - VIEW.width / 2) / zoom,
+    y: world.camera.y + (input.aimY - VIEW.height / 2) / zoom,
+  };
+}
+
 /** One fixed step of the player: aim, trigger, enter/exit, then either drive or walk. */
 export function updatePlayer(world, dt, input) {
   const player = world.player;
@@ -41,7 +50,10 @@ export function updatePlayer(world, dt, input) {
   player.recoil = Math.max(0, player.recoil - dt * 6);
   player.flash = Math.max(0, player.flash - dt);
 
-  player.aim = Math.atan2(input.aimY - player.y, input.aimX - player.x);
+  const aim = aimPoint(world, input);
+  player.aimX = aim.x;
+  player.aimY = aim.y;
+  player.aim = Math.atan2(aim.y - player.y, aim.x - player.x);
   if (input.weapon && WEAPON_ORDER.includes(input.weapon)) {
     if (player.weapon !== input.weapon) {
       player.weapon = input.weapon;

@@ -73,7 +73,7 @@ export function loadGame(world) {
   world.clock = data.clock ?? world.clock;
   world.wanted.level = Math.max(0, Math.min(5, data.wanted ?? 0));
   world.wanted.heat = data.heat ?? world.wanted.level * 100;
-  world.missions.index = Math.max(0, Math.min(3, data.mission ?? 0));
+  world.missions.index = Math.max(0, Math.min(5, data.mission ?? 0));
   world.missions.step = Math.max(0, data.step ?? 0);
   world.missions.active = Boolean(data.active);
   world.missions.done = data.done ?? 0;

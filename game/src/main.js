@@ -2,7 +2,7 @@
 // draw. Screens go title -> play -> pause, and wasted or busted out of a run; R builds a new city
 // from the same seed, L loads the saved run, F saves it. ?seed=N fixes the city, ?shot=<name>
 // stages a frozen screenshot scene instead of playing.
-import { CITY_NAME, STEP } from './config.js';
+import { CITY_NAME, STEP, VIEW } from './config.js';
 import { createWorld, updateWorld } from './world.js';
 import { createRenderer } from './render.js';
 import { createInput } from './input.js';
@@ -128,8 +128,8 @@ function play() {
         accumulator = 0;
         announce('Playing. WASD to move, E to get in a car.');
       } else {
-        idle.aimX = world.player.x + 120;
-        idle.aimY = world.player.y;
+        idle.aimX = VIEW.width / 2 + 150;
+        idle.aimY = VIEW.height / 2 - 30;
         updateWorld(world, STEP, idle);
       }
     } else if (world.screen === 'play') {

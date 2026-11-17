@@ -4,7 +4,8 @@
 // line. Nothing here reads the keyboard; it only reports what the world holds.
 import { CITY_NAME, HUD_FONT, PALETTE, POLICE, VIEW } from './config.js';
 import { ammoLabel, weaponOf } from './weapons.js';
-import { markerFor, objectiveText } from './missions.js';
+import { markerFor, objectiveText, progressText } from './missions.js';
+import { garageHint } from './garage.js';
 
 const MAP = { x: 16, y: VIEW.height - 16 - 190, size: 190 };
 const MAP_SCALE = 0.072;
@@ -111,6 +112,7 @@ function drawWanted(ctx, world) {
       level >= 3 ? PALETTE.danger : PALETTE.muted, 'right', '700');
   }
   label(ctx, CITY_NAME, VIEW.width - 20, 88, 13, 'rgba(255,255,255,0.35)', 'right', '700');
+  label(ctx, progressText(world), VIEW.width - 20, 106, 11, 'rgba(255,255,255,0.42)', 'right', '700');
 }
 
 /** The objective line, pinned to the top of the screen. */
@@ -202,6 +204,20 @@ function drawMinimap(ctx, world) {
     const p = toMap(pickup.x, pickup.y);
     ctx.fillStyle = pickup.kind === 'health' ? '#5fd17a' : pickup.kind === 'ammo' ? '#e8c766' : '#79d47a';
     ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+  }
+  // The respray garage, so a chase has somewhere to end.
+  if (world.city.garage) {
+    const spot = world.city.garage;
+    const p = toMap(spot.x + spot.w / 2, spot.y + spot.h / 2);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#4fd6c8';
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.strokeStyle = 'rgba(10,14,18,0.8)';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(-4, -4, 8, 8);
+    ctx.restore();
   }
 
   const marker = markerFor(world);
@@ -310,6 +326,22 @@ function drawControls(ctx) {
   label(ctx, text, VIEW.width / 2, VIEW.height - 18, 12, 'rgba(240,235,220,0.72)', 'center', '500');
 }
 
+/** The respray garage's line, bottom right, while the player is near its pad. */
+function drawGarageHint(ctx, world) {
+  const hint = garageHint(world);
+  if (!hint) return;
+  ctx.font = font(13, '700');
+  const width = ctx.measureText(hint.text).width + 26;
+  const x = VIEW.width - width - 20;
+  const y = VIEW.height - (world.player.car ? 152 : 78);
+  panel(ctx, x, y, width, 30, 0.8);
+  const tone = hint.tone === 'danger' ? PALETTE.danger : hint.tone === 'muted' ? PALETTE.muted : '#4fd6c8';
+  ctx.fillStyle = tone;
+  rr(ctx, x + 10, y + 11, 8, 8, 2);
+  ctx.fill();
+  label(ctx, hint.text, x + 24, y + 20, 13, tone, 'left', '700');
+}
+
 export function drawHUD(ctx, world) {
   if (world.screen === 'title') return;
   drawVitals(ctx, world);
@@ -317,6 +349,7 @@ export function drawHUD(ctx, world) {
   drawObjective(ctx, world);
   drawMinimap(ctx, world);
   drawVehicleHud(ctx, world);
+  drawGarageHint(ctx, world);
   drawDialog(ctx, world);
   drawToasts(ctx, world);
   drawControls(ctx);

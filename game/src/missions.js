@@ -58,6 +58,30 @@ export const MISSIONS = [
     ],
     reward: 5000,
   },
+  {
+    id: 'bad-blood',
+    title: 'Bad Blood',
+    contact: 'Mira',
+    contactAt: [0.24, 0.62],
+    intro: 'Mira: "The courier who skipped town is parked two streets over. Wreck his car so he walks home."',
+    steps: [
+      { kind: 'destroy', at: [0.52, 0.34], label: "Wreck the courier's car", radius: 0, line: 'The courier is asleep in the driver seat. He will not be for long.' },
+      { kind: 'evade', stars: 2, label: 'Leave before the police arrive', radius: 0, line: 'Mira: "Someone heard that. Move."' },
+    ],
+    reward: 1500,
+  },
+  {
+    id: 'last-run',
+    title: 'The Last Run',
+    contact: 'Tavo',
+    contactAt: [0.78, 0.46],
+    intro: 'Tavo: "One last night. The port office has my ledger. Take it, and every cop in Sol Verde will want you."',
+    steps: [
+      { kind: 'goto', at: [0.9, 0.2], label: 'Take the ledger from the port office', radius: 100, line: 'The ledger is a paper notebook. It is worth more than the boat outside.' },
+      { kind: 'evade', stars: 4, label: 'Outrun the port police', radius: 0, line: 'Tavo: "Four stars. You are famous now. Lose them and the city is yours."' },
+    ],
+    reward: 9000,
+  },
 ];
 
 export function createMissions() {
@@ -68,6 +92,7 @@ export function createMissions() {
     stepTimer: 0,
     target: { x: 0, y: 0 },
     contact: { x: 0, y: 0 },
+    marked: 0,
     dialog: '',
     speaker: '',
     dialogTimer: 0,
@@ -77,6 +102,38 @@ export function createMissions() {
     lastResult: '',
     resolves: new Map(),
   };
+}
+
+/** The HUD's job counter: which of the story's jobs the player is on. */
+export function progressText(world) {
+  const state = world.missions;
+  const total = MISSIONS.length;
+  const done = Math.min(state.done, total);
+  return `JOB ${Math.min(done + 1, total)}/${total}`;
+}
+
+/** A destroy step marks one car in the world: the courier's ride, or the nearest thing to it. */
+function markTarget(world, step) {
+  for (const vehicle of world.vehicles) vehicle.marked = false;
+  const state = world.missions;
+  const spot = step.at ? resolveSpot(world.city, step.at) : { x: world.player.x, y: world.player.y };
+  let best = null;
+  let bestDistance = Infinity;
+  for (const vehicle of world.vehicles) {
+    if (vehicle.scrapped || vehicle.driver === 'player' || vehicle.driver === 'police') continue;
+    const d = Math.hypot(vehicle.x - spot.x, vehicle.y - spot.y);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = vehicle;
+    }
+  }
+  state.marked = best ? best.id : 0;
+  if (best) {
+    best.marked = true;
+    state.target = { x: best.x, y: best.y };
+  } else {
+    state.target = spot;
+  }
 }
 
 /** Where a fraction of the city lands, snapped to a road so a marker never sits in a wall. */
@@ -111,6 +168,7 @@ export function startMission(world) {
   world.toast(`${mission.title} — ${mission.contact}`);
   const step = mission.steps[0];
   state.target = step.at ? resolveSpot(world.city, step.at) : { x: world.player.x, y: world.player.y };
+  if (step.kind === 'destroy') markTarget(world, step);
   if (step.kind === 'evade' && step.stars) setWanted(world, step.stars);
   if (world.audio) world.audio.mission();
 }
@@ -141,6 +199,7 @@ function advance(world) {
   }
   const step = mission.steps[state.step];
   state.target = step.at ? resolveSpot(world.city, step.at) : { x: world.player.x, y: world.player.y };
+  if (step.kind === 'destroy') markTarget(world, step);
   state.dialog = step.line ?? '';
   state.speaker = mission.contact;
   state.dialogTimer = 5.5;
@@ -165,6 +224,12 @@ export function stepDone(world, step) {
   const player = world.player;
   if (step.kind === 'goto') return Math.hypot(player.x - state.target.x, player.y - state.target.y) < (step.radius ?? 90);
   if (step.kind === 'steal') return Boolean(player.car);
+  if (step.kind === 'destroy') {
+    const target = world.vehicles.find((vehicle) => vehicle.id === state.marked);
+    const wrecked = !target || target.scrapped || target.hp <= 0;
+    if (wrecked) state.marked = 0;
+    return wrecked && state.stepTimer > 1.2;
+  }
   if (step.kind === 'evade') return state.stepTimer > 2.5 && world.wanted.level === 0;
   return false;
 }
@@ -197,6 +262,11 @@ export function markerFor(world) {
   if (state.active) {
     const mission = MISSIONS[state.index];
     const step = mission.steps[state.step];
+    if (step && step.kind === 'destroy') {
+      const target = world.vehicles.find((vehicle) => vehicle.id === state.marked);
+      const at = target ?? state.target;
+      return { x: at.x, y: at.y, label: step.label, kind: 'objective', radius: 60 };
+    }
     if (step && (step.kind === 'goto' || (step.kind === 'steal' && world.player.car))) {
       return { x: state.target.x, y: state.target.y, label: step.label, kind: 'objective', radius: step.radius ?? 90 };
     }

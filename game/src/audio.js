@@ -153,6 +153,12 @@ export function createAudio() {
       setTimeout(() => tone(659, 0.14, 0.11, 'triangle'), 130);
       setTimeout(() => tone(784, 0.24, 0.1, 'triangle'), 260);
     },
+    /** The garage: escaping air and paint, then a done chime. */
+    respray() {
+      burst(0.55, 0.2, 2600);
+      setTimeout(() => tone(660, 0.12, 0.1, 'triangle'), 280);
+      setTimeout(() => tone(990, 0.18, 0.09, 'triangle'), 400);
+    },
     engineOn() {
       tone(120, 0.18, 0.1, 'sawtooth', 220);
     },

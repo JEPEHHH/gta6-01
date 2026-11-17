@@ -2,7 +2,7 @@
 // of the game — a place, a car, a wanted level, a job — then runs the ordinary fixed-step
 // simulation with a scripted driver for a set number of steps and freezes it. The same seed always
 // produces the same frame, so a screenshot taken headless matches the one a player would see.
-import { CITY, STEP } from './config.js';
+import { CITY, RENDER, STEP, VIEW } from './config.js';
 import { updateWorld } from './world.js';
 import { createVehicle } from './vehicles.js';
 import { spawnPed } from './peds.js';
@@ -25,6 +25,27 @@ function simulate(world, seconds, input, each) {
     updateWorld(world, STEP, input);
     if (world.outcome) break;
   }
+}
+
+/** The screen point that aims the player at a world point: input reads screen, the game world. */
+function aimScreen(world, x, y) {
+  const zoom = world.zoom || RENDER.zoom;
+  return { aimX: VIEW.width / 2 + (x - world.camera.x) * zoom, aimY: VIEW.height / 2 + (y - world.camera.y) * zoom };
+}
+
+/** Point a scripted input frame at a world point. */
+function aimAt(world, input, x, y) {
+  const screen = aimScreen(world, x, y);
+  input.aimX = screen.aimX;
+  input.aimY = screen.aimY;
+}
+
+/** The block a point inside the city falls in. */
+function blockAt(city, x, y) {
+  for (const block of city.blocks) {
+    if (x >= block.x && x <= block.x + block.w && y >= block.y && y <= block.y + block.h) return block;
+  }
+  return null;
 }
 
 /** The block nearest the middle of town that is not the marina. */
@@ -110,7 +131,7 @@ function dressFarSide(world, block, count = 3) {
 
 /** shot=start — the title over a live junction at dusk. */
 function sceneStart(world) {
-  world.clock = 19 * 60 + 24;
+  world.clock = 18 * 60 + 42;
   world.screen = 'title';
   const block = centreBlock(world);
   standOnCorner(world, block);
@@ -119,33 +140,44 @@ function sceneStart(world) {
   simulate(world, 2.2, blank());
 }
 
-/** shot=city — on foot on a busy junction in daylight, HUD and minimap up. */
+/** shot=city — on foot on a busy junction in daylight, the respray garage behind, HUD up. */
 function sceneCity(world) {
   world.clock = 16 * 60 + 40;
   world.screen = 'play';
-  const block = centreBlock(world);
+  const garage = world.city.garage;
+  const block = (garage && blockAt(world.city, garage.x + garage.w / 2, garage.y + garage.h / 2)) ?? centreBlock(world);
   standOnCorner(world, block);
   const player = world.player;
   player.weapon = 'smg';
   player.cash = 1240;
   player.ammo.smg = 240;
+  player.hp = 94;
   // The job's contact is across town, so this frame stays free roam with the marker pointing away.
-  world.missions.contact = { x: player.x + 1500, y: player.y - 900 };
+  world.missions.contact = { x: player.x + 1400, y: player.y - 800 };
   fillJunction(world, world.camera);
   dressPavement(world, block, 6);
-  dressFarSide(world, block, 3);
-  const aimX = player.x + 260;
+  dressFarSide(world, block, 4);
+
+  // A car at the kerb in reach of the player, and cash on the pavement: the two things to grab.
+  const kerb = createVehicle(world, 'sport', player.x - 96, player.y + 64, Math.PI, 'none');
+  kerb.color = '#2ec4b6';
+  world.spawnPickup('cash', block.x + block.w - 62, block.y + block.h - 8, 60);
+
+  const aimX = player.x + 240;
   const aimY = player.y - 90;
   const input = blank();
-  simulate(world, 1.5, input, () => {
-    input.aimX = aimX;
-    input.aimY = aimY;
+  simulate(world, 1.6, input, (index) => {
+    aimAt(world, input, aimX, aimY);
+    input.right = index < 26;
   });
+  // The camera sits between the player and what he is aiming at.
+  world.camera.x = player.x + 34;
+  world.camera.y = player.y - 26;
 }
 
-/** shot=chase — four stars, patrol cars and the helicopter shadow behind the player's car. */
+/** shot=chase — four stars, patrol cars ahead and alongside, helicopter shadow, a live objective. */
 function sceneChase(world) {
-  world.clock = 19 * 60 + 52;
+  world.clock = 18 * 60 + 12;
   world.screen = 'play';
   const city = world.city;
   const junction = nearestJunction(city, city.centre.x, city.centre.y);
@@ -158,35 +190,50 @@ function sceneChase(world) {
   player.y = car.y;
   player.cash = 8420;
   player.weapon = 'smg';
-  car.vx = 300;
+  player.ammo.smg = 180;
+  player.hp = 88;
+  car.vx = 330;
+  car.vy = 0;
   world.camera.x = car.x + 240;
   world.camera.y = car.y;
 
   setWanted(world, 4);
+  world.missions.index = 0;
   startMission(world);
-  for (const [dx, dy] of [[-190, -60], [-120, 76], [-320, 8]]) {
+  // Patrol cars ahead and alongside, the way a pursuit looks from behind the wheel.
+  const units = [[210, -74], [150, 78], [-150, -72], [-215, 58]];
+  units.forEach(([dx, dy], index) => {
     const unit = createVehicle(world, 'police', car.x + dx, lane + dy, 0, 'police');
-    unit.vx = 300;
+    unit.vx = 330;
     unit.siren = 1;
-    unit.fireCd = 1.4;
-    unit.aggression = 1;
+    unit.fireCd = 0.8;
+    unit.aggression = 1.1 - index * 0.1;
     world.wanted.units.push(unit);
+  });
+  fillJunction(world, car, 170);
+  dressPavement(world, centreBlock(world), 5);
+  dressFarSide(world, centreBlock(world), 3);
+
+  // Rubber down behind the car and sparks off the bonnet: the chase is happening right now.
+  for (let i = 0; i < 16; i += 1) {
+    world.addDecal('tire', car.x - 96 - i * 24, lane + (i % 2 === 0 ? 10 : -10), 0, 9, 24);
   }
-  fillJunction(world, car, 150);
-  dressPavement(world, centreBlock(world), 4);
-  dressFarSide(world, centreBlock(world), 2);
+  world.spawnParticle('spark', car.x + 26, lane - 18, { count: 8, speed: 220 });
+  world.spawnParticle('flash', car.x + 30, lane - 20, { count: 1, size: 14, life: 0.5, color: '#ffe9a8' });
 
   const input = blank();
   input.up = true;
   input.run = true;
-  simulate(world, 2.2, input, (index) => {
-    input.aimX = world.player.x + 160;
-    input.aimY = world.player.y - 80;
-    input.left = index > 70 && index < 86;
+  simulate(world, 2.0, input, (index) => {
+    aimAt(world, input, world.player.x + 220, world.player.y - 90);
+    input.left = index > 74 && index < 88;
   });
+  // The car low in frame, the road and the pursuit ahead of it.
+  world.camera.x = car.x + 70;
+  world.camera.y = car.y + 20;
 }
 
-/** shot=mission — a job in progress: marker, contact line, muzzle flash, cash on the HUD. */
+/** shot=mission — a job in progress on foot: a marked car to wreck, the contact's line, muzzle flash. */
 function sceneMission(world) {
   world.clock = 18 * 60 + 30;
   world.screen = 'play';
@@ -194,41 +241,45 @@ function sceneMission(world) {
   standOnCorner(world, block);
   const player = world.player;
   player.cash = 4820;
-  player.weapon = 'pistol';
+  player.weapon = 'smg';
+  player.ammo.smg = 168;
   player.hp = 78;
   player.armor = 40;
-  player.ammo.pistol = 94;
   fillJunction(world, world.camera);
-  dressPavement(world, block, 6);
-  dressFarSide(world, block, 4);
+  dressPavement(world, block, 5);
+  dressFarSide(world, block, 3);
 
+  // The courier's car: a job with a target you can put a ring around.
+  world.missions.index = 4;
   startMission(world);
-  const state = world.missions;
-  state.target = { x: block.x + block.w + CITY.road + 150, y: block.y + block.h - 40 };
-  state.dialog = 'Riva: "Crate at Pier Nine. Tavo pays on delivery. Do not open it."';
-  state.dialogTimer = 9;
-
-  // A target on the far pavement, one of the people already walking there.
-  const targetPed = spawnPed(world, block);
-  if (targetPed) {
-    targetPed.x = block.x + block.w + CITY.road + 22;
-    targetPed.y = player.y - 34;
-    targetPed.angle = Math.PI;
-    targetPed.flee = 0;
+  const marked = world.vehicles.find((vehicle) => vehicle.marked);
+  if (marked) {
+    marked.x = player.x + 215;
+    marked.y = player.y - 66;
+    marked.angle = Math.PI;
+    marked.driver = 'none';
+    marked.nav = null;
+    marked.vx = 0;
+    marked.vy = 0;
+    marked.hp = marked.maxHp * 0.5;
+    world.missions.target = { x: marked.x, y: marked.y };
   }
 
-  const aimX = block.x + block.w + CITY.road + 22;
-  const aimY = player.y - 34;
-  player.aim = Math.atan2(aimY - player.y, aimX - player.x);
+  const aimX = marked ? marked.x : player.x + 215;
+  const aimY = marked ? marked.y : player.y - 66;
   const input = blank();
-  simulate(world, 1.4, input, () => {
-    input.aimX = aimX;
-    input.aimY = aimY;
+  simulate(world, 1.3, input, (index) => {
+    aimAt(world, input, aimX, aimY);
+    if (index % 8 === 0) world.spawnParticle('smoke', aimX - 30, aimY + 4, { count: 1, speed: 24, rise: -30, size: 11 });
   });
-  // Fire on the very last step: the muzzle flash and the round in the air are still on screen
-  // when the frame freezes.
+  // Fire on the last steps: the flash, the tracer and the smoke are all on screen when it freezes.
+  aimAt(world, input, aimX, aimY);
   input.fire = true;
   updateWorld(world, STEP, input);
+  updateWorld(world, STEP, input);
+
+  world.camera.x = player.x + 74;
+  world.camera.y = player.y - 34;
 }
 
 const SCENES = { start: sceneStart, city: sceneCity, chase: sceneChase, mission: sceneMission };

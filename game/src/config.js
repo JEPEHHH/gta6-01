@@ -47,7 +47,7 @@ export const CAR_TYPES = [
   { id: 'taxi', name: 'Cabbie', length: 68, width: 32, maxSpeed: 400, accel: 300, turn: 2.5, grip: 0.82, hp: 130,
     colors: ['#f0c132'] },
   { id: 'police', name: 'Patrol 12', length: 70, width: 33, maxSpeed: 520, accel: 400, turn: 2.7, grip: 0.86, hp: 220,
-    colors: ['#f4f6f8'] },
+    colors: ['#22304c'] },
 ];
 
 export const CIVILIAN_TYPES = ['sedan', 'sport', 'van', 'pickup', 'taxi'];
@@ -74,12 +74,26 @@ export const ECON = {
 };
 
 export const PALETTE = {
-  asphalt: '#3c3b42',
-  asphaltAlt: '#42414a',
+  asphalt: '#4a4952',
+  asphaltAlt: '#514f59',
+  asphaltPatch: 'rgba(28,27,32,0.30)',
   lane: '#e3d6ae',
-  laneFaint: 'rgba(227,214,174,0.32)',
-  sidewalk: '#b6a992',
-  sidewalkEdge: '#9d8f78',
+  laneFaint: 'rgba(236,226,196,0.42)',
+  sidewalk: '#c8bba3',
+  sidewalkEdge: '#a4977f',
+  curb: '#8b7f6c',
+  curbLight: 'rgba(255,246,224,0.35)',
+  tyre: '#1b1c21',
+  glass: 'rgba(176,214,232,0.62)',
+  windowLit: 'rgba(255,214,140,0.72)',
+  windowDark: 'rgba(38,46,58,0.55)',
+  signalRed: '#e2493c',
+  signalAmber: '#f2b23c',
+  signalGreen: '#4fd08a',
+  signalOff: 'rgba(20,22,28,0.6)',
+  shutter: '#7a7f86',
+  awning: ['#c8382f', '#2f6f5e', '#3f5f9c', '#c99a2f'],
+  billboard: '#2a2f38',
   sidewalkLine: 'rgba(110,98,80,0.35)',
   grass: '#5e8b47',
   grassDark: '#4a7239',

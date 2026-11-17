@@ -40,7 +40,11 @@ function makeBuilding(lot, kind, random, city) {
     vents: [],
     plants: [],
   };
-  if (kind === 'commercial' && random.chance(0.7)) building.shop = random.pick(SHOP_NAMES);
+  if (kind === 'commercial' && random.chance(0.7)) {
+    building.shop = random.pick(SHOP_NAMES);
+    building.awning = random.pick(PALETTE.awning);
+  }
+  if (kind !== 'residential' && random.chance(0.4)) hangBillboard(building, random, city);
   if (tall && random.chance(0.45)) building.spire = 8 + random.int(14);
   // A stair head or lift housing on the roof, which is what makes a flat roof read as a building.
   if (random.chance(0.7)) {
@@ -179,6 +183,97 @@ function buildWater(block, random, city) {
   }
 }
 
+/** A signal head on every corner of every junction: the grid reads as streets people drive. */
+function buildSignals(city, random) {
+  const { pitch, road, cols, rows } = CITY;
+  const half = road / 2 + 14;
+  for (let i = 0; i <= cols; i += 1) {
+    for (let j = 0; j <= rows; j += 1) {
+      const cx = i * pitch + road / 2;
+      const cy = j * pitch + road / 2;
+      for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        city.signals.push({
+          x: cx + dx * half,
+          y: cy + dy * half,
+          // Signals on the same axis share a phase, so a junction reads as one crossing.
+          phase: ((i + (dy < 0 ? 0 : 1)) % 2) * 4.5 + random.range(0, 0.35),
+          delay: (Math.abs(dx) + Math.abs(dy)) * 0.06,
+        });
+      }
+    }
+  }
+}
+
+/** Bins, planters, a bench and a hydrant: the small furniture that makes a pavement a place. */
+function dressSidewalk(block, random, city) {
+  const { walk } = CITY;
+  const south = block.y + block.h - walk * 0.45;
+  const north = block.y + walk * 0.45;
+  city.props.push({ kind: 'bin', x: block.x + random.range(0.12, 0.88) * block.w, y: south, a: 0 });
+  if (random.chance(0.6)) {
+    city.props.push({ kind: 'planter', x: block.x + random.range(0.1, 0.9) * block.w, y: north, a: 0 });
+  }
+  if (random.chance(0.4)) {
+    city.props.push({ kind: 'bin', x: block.x + walk * 0.45, y: block.y + random.range(0.2, 0.8) * block.h, a: 0 });
+  }
+}
+
+/** A lit hoarding on the front of a commercial roof, so the skyline carries the city's own words. */
+function hangBillboard(building, random, city) {
+  const words = ['SOL', 'PIER 9', 'RIVA', 'CEDRO', 'TALLER', 'MOTEL', 'MAREA'];
+  const w = Math.min(building.w - 20, random.range(70, 128));
+  building.billboard = {
+    x: building.x + 10 + random.range(0, building.w - w - 20),
+    y: building.y + building.h - 34,
+    w,
+    h: 20,
+    text: random.pick(words),
+    tint: random.pick(PALETTE.neon),
+  };
+  void city;
+}
+
+/** The respray garage: a lock-up at the back of the lot nearest the middle of town. */
+function buildGarage(block, random, city) {
+  const { walk } = CITY;
+  const w = Math.min(240, block.w * 0.46);
+  const h = Math.min(150, block.h * 0.34);
+  const x = block.x + block.w - walk - w - 6;
+  const y = block.y + walk + 8;
+  const shade = random.int(PALETTE.roofs.length);
+  const building = {
+    x,
+    y,
+    w,
+    h,
+    floors: 2,
+    roof: '#a6a094',
+    wall: shade % 2 === 0 ? '#7a828a' : '#8d8272',
+    lit: false,
+    neon: '#4fd6c8',
+    shop: null,
+    vents: [],
+    plants: [],
+    garage: true,
+    sign: 'TALLER SOL',
+    door: { x: x + w * 0.18, y: y + h - 26, w: w * 0.64, h: 26 },
+  };
+  city.buildings.push(building);
+  const padH = Math.min(104, block.y + block.h - walk - (y + h) - 12);
+  city.garage = {
+    x,
+    y,
+    w,
+    h,
+    door: building.door,
+    pad: { x: x + w * 0.06, y: y + h + 6, w: w * 0.88, h: Math.max(48, padH) },
+    sign: building.sign,
+  };
+  // Nothing parks where the roller door opens.
+  const pad = city.garage.pad;
+  city.parked = city.parked.filter((slot) => !(slot.x > x - 20 && slot.x < x + w + 20 && slot.y > y - 20 && slot.y < pad.y + pad.h + 10));
+}
+
 export function createCity(random) {
   const { cols, rows, pitch, road, width, height, walk } = { ...CITY, width: CITY.cols * CITY.pitch + CITY.road, height: CITY.rows * CITY.pitch + CITY.road };
 
@@ -206,6 +301,8 @@ export function createCity(random) {
     decks: [],
     boats: [],
     lamps: [],
+    signals: [],
+    garage: null,
     grid: new Map(),
   };
 
@@ -236,6 +333,7 @@ export function createCity(random) {
       }
       if (kind !== 'water' && kind !== 'park') {
         city.props.push({ kind: 'hydrant', x: block.x + block.w * 0.5 + random.range(-40, 40), y: block.y + walk * 0.5, a: 0 });
+        dressSidewalk(block, random, city);
       }
     }
   }
@@ -255,6 +353,22 @@ export function createCity(random) {
   }
 
   paintRoads(city, random);
+  buildSignals(city, random);
+
+  // The respray garage stands on the lot nearest the middle of town, so a chase can end there.
+  const lots = city.blocks.filter((block) => block.kind === 'lot');
+  if (lots.length > 0) {
+    let best = lots[0];
+    let bestDistance = Infinity;
+    for (const lot of lots) {
+      const d = Math.hypot(lot.x + lot.w / 2 - city.centre.x, lot.y + lot.h / 2 - city.centre.y);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = lot;
+      }
+    }
+    buildGarage(best, random, city);
+  }
 
   // Index the buildings so collision and culling only look at a handful of them.
   for (const b of city.buildings) {

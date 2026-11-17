@@ -2,7 +2,7 @@
 // pedestrians, police, bullets, pickups, particles, decals). It owns update order and the helpers
 // the other systems call — spawn a particle, report a crime, hurt the player, keep the population
 // topped up around the camera — so those modules never import each other.
-import { CITY, POP, PLAYER, TIME, VIEW } from './config.js';
+import { CITY, POP, PLAYER, RENDER, TIME, VIEW } from './config.js';
 import { clamp, createRandom } from './random.js';
 import { blocked, createCity, hitBuilding, nearBuildings } from './city.js';
 import { createPlayer, updatePlayer } from './player.js';
@@ -12,6 +12,7 @@ import { spawnPed, updatePeds } from './peds.js';
 import { createWanted, reportCrime, setWanted, updatePolice } from './police.js';
 import { updateBullets } from './weapons.js';
 import { createMissions, updateMissions } from './missions.js';
+import { createGarageState, updateGarage } from './garage.js';
 import { ECON } from './config.js';
 
 const MAX_PARTICLES = 320;
@@ -44,6 +45,7 @@ export function createWorld(seed) {
     wanted: createWanted(),
     missions: createMissions(),
     camera: { x: 0, y: 0 },
+    zoom: RENDER.zoom,
     shake: 0,
     flash: 0,
     hitFlash: 0,
@@ -126,6 +128,7 @@ export function createWorld(seed) {
   world.player = createPlayer(city);
   world.camera.x = world.player.x;
   world.camera.y = world.player.y;
+  world.garage = createGarageState(city);
   spawnParked(world);
 
   // A first population so the streets are never empty on the first frame.
@@ -150,6 +153,7 @@ export function updateWorld(world, dt, input) {
   updatePolice(world, dt);
   updateBullets(world, dt);
   updatePickups(world, dt);
+  updateGarage(world, dt);
   updateParticles(world, dt);
   updateDecals(world, dt);
   updateMessages(world, dt);
@@ -221,26 +225,37 @@ function updatePickups(world, dt) {
   }
 }
 
-/** The camera: follows the car when driving (with a look-ahead), the player on foot. */
+/** The camera: leads the car, holds the crosshair's side of the street, pulls back with speed. */
 function updateCamera(world, dt) {
   const player = world.player;
   let targetX = player.x;
   let targetY = player.y;
+  let speed = Math.hypot(player.vx, player.vy);
   if (player.car) {
     const car = player.car;
-    const speed = Math.hypot(car.vx, car.vy);
+    speed = Math.hypot(car.vx, car.vy);
     const lead = Math.min(170, speed * 0.26);
     targetX = car.x + Math.cos(car.angle) * lead;
     targetY = car.y + Math.sin(car.angle) * lead;
   } else {
-    targetX += player.vx * 0.32;
-    targetY += player.vy * 0.32;
+    // On foot the player body sits away from the crosshair, so what is aimed at stays in frame.
+    const reach = Math.hypot((player.aimX ?? player.x) - player.x, (player.aimY ?? player.y) - player.y);
+    const gaze = Math.min(92, reach * 0.24);
+    targetX += Math.cos(player.aim) * gaze + player.vx * 0.22;
+    targetY += Math.sin(player.aim) * gaze + player.vy * 0.22;
   }
   const k = 1 - Math.exp(-6.5 * dt);
   world.camera.x += (targetX - world.camera.x) * k;
   world.camera.y += (targetY - world.camera.y) * k;
-  world.camera.x = clamp(world.camera.x, 0, world.city.width);
-  world.camera.y = clamp(world.camera.y, 0, world.city.height);
+
+  // A slower zoom that opens the frame as the car runs, and closes it again when it stops.
+  const wantZoom = RENDER.zoom - Math.min(0.1, (speed / 560) * 0.1);
+  world.zoom += (wantZoom - world.zoom) * (1 - Math.exp(-3.4 * dt));
+
+  const halfW = VIEW.width / 2 / world.zoom;
+  const halfH = VIEW.height / 2 / world.zoom;
+  world.camera.x = clamp(world.camera.x, halfW * 0.55, world.city.width - halfW * 0.55);
+  world.camera.y = clamp(world.camera.y, halfH * 0.55, world.city.height - halfH * 0.55);
 }
 
 /** Spawn and retire AI cars and pedestrians so the streets near the camera stay busy. */
