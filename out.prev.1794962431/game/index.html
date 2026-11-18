@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salt Harbor — an open-world crime game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1016; }
+  #wrap { position: fixed; inset: 0; display: grid; place-items: center; }
+  #game {
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: auto;
+    aspect-ratio: 16 / 9;
+    display: block;
+    background: #16202a;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+    cursor: crosshair;
+  }
+  /* Read aloud, never shown: the status line screen readers announce. */
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="1280" height="720" aria-label="Salt Harbor: an open-world crime game. Walk with WASD, aim and shoot with the mouse, take a car with E."></canvas>
+</div>
+<p id="status" role="status" aria-live="polite">Salt Harbor. Press Enter to start.</p>
+<script>
+  // A module that fails leaves a blank canvas: keep the reason where a person (or a headless
+  // run) can read it instead of guessing.
+  window.addEventListener('error', function (event) {
+    document.body.setAttribute('data-error', String(event.message) + ' @ ' + String(event.filename) + ':' + String(event.lineno));
+  });
+  window.addEventListener('unhandledrejection', function (event) {
+    document.body.setAttribute('data-error', 'promise: ' + String(event.reason && event.reason.message ? event.reason.message : event.reason));
+  });
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
